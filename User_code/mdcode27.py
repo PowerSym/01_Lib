@@ -5,7 +5,7 @@ import sys
 from shutil import copyfile
 
 
-vestas_dll_dir = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\Lib\Vestas_dlls"
+vestas_dll_dir = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\01_Lib\Vestas_dlls"
 wtg_source_code_path = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\Source Code\01. WTG"
 ppc_source_code_path = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\Source Code\02. PPC"
 fbc_user_code_path = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\Source Code\03. " \
