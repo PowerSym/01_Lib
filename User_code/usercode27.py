@@ -5,9 +5,9 @@ import psse34
 import psspy
 import redirect
 import shutil
-_i=psspy.getdefaultint()
-_f=psspy.getdefaultreal()
-_s=psspy.getdefaultchar()
+_i = psspy.getdefaultint()
+_f = psspy.getdefaultreal()
+_s = psspy.getdefaultchar()
 MisMatch_Tol = 0.001
 cwd = os.getcwd()
 Plotting_tools = os.path.join(os.path.dirname(cwd),'Plotting_tools')
@@ -1249,7 +1249,7 @@ def tune_capbank(p_poc_MW,q_poc_MVar,wfbase_MW,Project_info):
     else:
         num_cap = 6
     for msu_cap in msu_caps:
-        psspy.switched_shunt_chng_3(msu_cap[0],intgar9 = 1, realar11=msu_cap[int(num_cap)+1])
+        psspy.switched_shunt_chng_3(msu_cap[0], intgar9=1, realar11=msu_cap[int(num_cap)+1])
     return(int(num_cap))
 # ========================================================
 def adjust_Q_and_V_POC_SMIB(case, new_case, scr, xr, P_POC, Q_POC, V_POC,wfbase_MW,Project_info):
