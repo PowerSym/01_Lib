@@ -1743,7 +1743,6 @@ def read_project_info(excel_file,version):
                         col_idx_data = []
                         for row_idx in range(start_icon+1, start_icon+1+num_icon):
                             cell_obj = (xl_sheet.cell(row_idx, col_idx)).value
-                            print 'col_idx, row_idx, cell_obj = ', col_idx, row_idx, cell_obj
                             if isinstance(cell_obj, unicode):
                                 cell_obj = str(cell_obj)
                             elif isinstance(cell_obj, float):
