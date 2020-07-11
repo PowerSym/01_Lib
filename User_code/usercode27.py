@@ -48,6 +48,7 @@ def Initial(Project_info,study_case,main_python, org_sav_file,vestas_dyr,add_dyr
                 new_sav_file = os.path.join(output_files_dir,os.path.basename(org_sav_file))
             psspy.psseinit(80000)
             log_file('%s_1.dat' % new_sav_file[0:-4])
+            report_file('%s_docu.dat' % new_sav_file[0:-4])
             psspy.case(new_sav_file)
             if 'nem' in NEM_Conv_file.lower():
                 sys.path.append(os.path.dirname(NEM_Conv_file))
@@ -66,6 +67,7 @@ def Initial(Project_info,study_case,main_python, org_sav_file,vestas_dyr,add_dyr
                 J_ppc,M_ppc,L_ppc,K_ppc = dynamic_intialise_v8(Project_info,vestas_dyr,add_dyrs,vestas_dlls,add_dlls)
             start(new_sav_file,test_cases,i, vestas_dlls, add_dlls)
             runtime = 20
+            ierr = psspy.docu(0, 1, [0, 3, 1])
             psspy.run(0, runtime, nprt, nplt, crtplt)
             os.chdir(os.path.dirname(main_python))
             psspy.stoprecording()
@@ -316,6 +318,7 @@ def RPT(Project_info,study_case,main_python, org_sav_file,vestas_dyr,add_dyrs,ve
     dirCreateClean(output_files_dir, ["*.pdf"])
     test_cases = read_excel_sheet(study_case,os.path.basename(main_python)[0:-3])
     wfbase_MW = check_wfbase_MW(Project_info, org_sav_file)
+    wfbase_MW = 336
     for i in range(len(test_cases['Case No'])):
         if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
             new_sav_file = '%s.sav' % os.path.join(output_files_dir, 'Case_%02d_%s_PSSE' % (i, Test))
@@ -895,7 +898,7 @@ def FCT_K2(Project_info,study_case,main_python, org_sav_file,vestas_dyr,add_dyrs
             else:
                 Convert()
             add_dlls_new = add_dlls
-            add_dlls_new.append(os.path.join(os.path.dirname(vestas_dlls[0]),'dsusrusercode.dll'))
+            # add_dlls_new.append(os.path.join(os.path.dirname(vestas_dlls[0]),'dsusrusercode.dll'))
             add_dyrs.append(os.path.join(os.path.dirname(org_sav_file),'FCT Dyr Dll\\%s.dyr' %test_cases['Ref 1'][i]))
             if 'VWRE_J' in Project_info:
                 J_ppc_VWPO,M_ppc_VWPO,L_ppc_VWPO,K_ppc_VWPO,J_ppc_VWRE,M_ppc_VWRE,L_ppc_VWRE,K_ppc_VWRE = dynamic_intialise_legacy(Project_info,vestas_dyr,add_dyrs,vestas_dlls,add_dlls_new)
@@ -1522,11 +1525,11 @@ def dynamic_intialise_legacy(Project_info,vestas_dyr,add_dyrs='',vestas_dlls='',
     psspy.branch_p_and_q_channel([-1, -1, -1, ppc_line[0], ppc_line[1]], ppc_line[2], ["p_pcc_meas_MW", "q_pcc_meas_MVar"])
     psspy.bus_frequency_channel([-1, ppc_line[1]], "f_dev_pcc_meas_pu")
 
-    J_wtg_GSVWs,M_wtg_GSVWs,L_wtg_GSVWs,K_wtg_GSVWs = [],[],[],[]
-    J_wtg_GSPQs,M_wtg_GSPQs,L_wtg_GSPQs,K_wtg_GSPQs = [],[],[],[]
-    J_wtg_GSLHs,M_wtg_GSLHs,L_wtg_GSLHs,K_wtg_GSLHs = [],[],[],[]
-    J_wtg_GSMEs,M_wtg_GSMEs,L_wtg_GSMEs,K_wtg_GSMEs = [],[],[],[]
-    J_wtg_GSVFs,M_wtg_GSVFs,L_wtg_GSVFs,K_wtg_GSVFs = [],[],[],[]
+    J_wtg_GSVWs, M_wtg_GSVWs, L_wtg_GSVWs, K_wtg_GSVWs = [],[],[],[]
+    J_wtg_GSPQs, M_wtg_GSPQs, L_wtg_GSPQs, K_wtg_GSPQs = [],[],[],[]
+    J_wtg_GSLHs, M_wtg_GSLHs, L_wtg_GSLHs, K_wtg_GSLHs = [],[],[],[]
+    J_wtg_GSMEs, M_wtg_GSMEs, L_wtg_GSMEs, K_wtg_GSMEs = [],[],[],[]
+    J_wtg_GSVFs, M_wtg_GSVFs, L_wtg_GSVFs, K_wtg_GSVFs = [],[],[],[]
 
     for wtg_bus in wtg_buses:
         ierr, J_wtg_GSVW = psspy.windmind(wtg_bus[0], wtg_bus[1], 'WGEN', 'CON')
@@ -1804,8 +1807,66 @@ def read_project_info(excel_file,version):
                 col_idx_data = (int(xl_sheet.cell(1, col_idx).value),(xl_sheet.cell(5, col_idx)).value,(xl_sheet.cell(6, col_idx)).value,(xl_sheet.cell(7, col_idx)).value,(xl_sheet.cell(8, col_idx)).value,(xl_sheet.cell(9, col_idx)).value,(xl_sheet.cell(10, col_idx)).value,(xl_sheet.cell(11, col_idx)).value)
                 Project_info['msu_caps'].append(col_idx_data)
 
-        xl_sheet = xl_workbook.sheet_by_name('USRCD1')
-        dyrs = ['MSU', 'FCT_01', 'FCT_02', 'FCT_03', 'FCT_04', 'FCT_05', 'FCT_06', 'FCT_07', 'FCT_08']
+        xl_sheet = xl_workbook.sheet_by_name('UCMSUFB')
+        dyrs = ['MSU']
+        for row_idx in range(0, xl_sheet.nrows):
+            cell_obj = (xl_sheet.cell(row_idx, 0)).value
+            if 'ICON' in cell_obj:
+                start_icon = row_idx
+            elif 'CON' in cell_obj:
+                start_con = row_idx
+            elif 'STATE' in cell_obj:
+                start_state = row_idx
+            elif 'VAR' in cell_obj:
+                start_var = row_idx
+        row_title = xl_sheet.row(0)
+        for col_idx in range(len(row_title)):
+            for dyr in dyrs:
+                if dyr in row_title[col_idx].value:
+                    # Title
+                    Project_info[dyr + '_description'] = (xl_sheet.cell(start_icon, col_idx)).value
+                    title = (xl_sheet.cell(start_icon, col_idx)).value
+                    # read ICON
+                    num_icon = int(re.split('[ :,;]', title)[-4])
+                    num_con = int(re.split('[ :,;]', title)[-3])
+                    num_state = int(re.split('[ :,;]', title)[-2])
+                    num_var = int(re.split('[ :,;]', title)[-1])
+                    col_idx_data = []
+                    for row_idx in range(start_icon + 1, start_icon + 1 + num_icon):
+                        cell_obj = (xl_sheet.cell(row_idx, col_idx)).value
+                        if isinstance(cell_obj, unicode):
+                            cell_obj = str(cell_obj)
+                        elif isinstance(cell_obj, float):
+                            cell_obj = int(cell_obj)
+                        if cell_obj != '':
+                            col_idx_data.append(cell_obj)
+                    Project_info[dyr + '_M'] = col_idx_data
+                    # read CON
+                    col_idx_data = []
+                    for row_idx in range(start_con + 1, start_con + 1 + num_con):
+                        cell_obj = (xl_sheet.cell(row_idx, col_idx)).value
+                        if isinstance(cell_obj, unicode):
+                            cell_obj = str(cell_obj)
+                        if cell_obj != '':
+                            col_idx_data.append(cell_obj)
+                    Project_info[dyr + '_J'] = col_idx_data
+                    # read STATE
+                    col_idx_data = []
+                    for row_idx in range(start_state + 1, start_state + 1 + num_state):
+                        cell_obj = int((xl_sheet.cell(row_idx, col_idx)).value)
+                        if cell_obj != '':
+                            col_idx_data.append(cell_obj)
+                    Project_info[dyr + '_K'] = col_idx_data
+                    # read VAR
+                    col_idx_data = []
+                    for row_idx in range(start_var + 1, start_var + 1 + num_var):
+                        cell_obj = int((xl_sheet.cell(row_idx, col_idx)).value)
+                        if cell_obj != '':
+                            col_idx_data.append(cell_obj)
+                    Project_info[dyr + '_L'] = col_idx_data
+
+        xl_sheet = xl_workbook.sheet_by_name('UCFI')
+        dyrs = ['FCT_01', 'FCT_02', 'FCT_03', 'FCT_04', 'FCT_05', 'FCT_06', 'FCT_07', 'FCT_08']
         for row_idx in range(0, xl_sheet.nrows):
             cell_obj = (xl_sheet.cell(row_idx, 0)).value
             if 'ICON' in cell_obj:
@@ -2092,6 +2153,20 @@ def log_file(dat_file_name):
     Outf=open(Progress,'w+')
     Outf.close()
     psspy.t_progress_output(2,Progress,[2,0]) #Use this API to specify the progress output device.
+
+# =======================================================
+def report_file(dat_file_name):
+    redirect.psse2py()
+    psspy.psseinit()     #initialise PSSE so psspy commands can be called
+    psspy.throwPsseExceptions = True
+    try:
+        os.mkdir(os.path.dirname(dat_file_name))
+    except OSError:
+        pass
+    Report = dat_file_name
+    Outf=open(Report,'w+')
+    Outf.close()
+    psspy.t_report_output(2,Report,[2,0]) #Use this API to specify the progress output device.
 # ========================================================
 def get_files_name(path, fileTypes):
     cases = []
