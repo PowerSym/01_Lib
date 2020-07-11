@@ -21,7 +21,8 @@ import automation.pscad
 def Initial(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
     Test = 'Initial'
     pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
-    PPC_ID, Rgrid_ID,Lgrid_ID,Vref_pu_ID,p_ppc_ref_pu_ID, Vsmib_pu_ID = Component_IDs
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
     output_files_dir = os.path.join(results, Test)
     src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
     uc.dirCreateClean(output_files_dir, [".pdf"])
@@ -30,10 +31,9 @@ def Initial(PSCAD_input_file,study_cases_file,python_file,results, Project_info,
     test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
     for i in range(len(test_cases['Case No'])):
         if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
-            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom,wfbase_MW, test_cases['SCR'][i], test_cases['XR'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
             output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
-            overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
-            uc.dirCreateClean(overlay_dir, [".pdf"])
+            output_filename = '%s' % (os.path.basename(PSCAD_input_file)[0:-9])
             pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
             project.set_parameters(time_duration=20, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
             Main = project.user_canvas('Main')
@@ -42,6 +42,14 @@ def Initial(PSCAD_input_file,study_cases_file,python_file,results, Project_info,
             Main.user_cmp(int(Vref_pu_ID)).set_parameters(V_1=test_cases['Vref_PSCAD_droop (pu)'][i])
             Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
             Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) ==0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName = 0, Name = New_Symbols[j])
             ws.create_simulation_set(prj_name)
             ss = ws.simulation_set(prj_name)
             ss.add_tasks(prj_name)
@@ -54,15 +62,18 @@ def Initial(PSCAD_input_file,study_cases_file,python_file,results, Project_info,
             pscad.quit()
             uc.copy(src_folder, output_files_dir, [".out", ".inf"])
             if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
                 uc.copy(src_folder, overlay_dir, [".out", ".inf"])
             uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
     if 'y' in Plotting_option.lower():
         plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
 # =======================================================
-def APT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs,Ref_ID):
+def APT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
     Test = 'APT'
     pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
-    PPC_ID, Rgrid_ID,Lgrid_ID,Vref_pu_ID,p_ppc_ref_pu_ID, Vsmib_pu_ID = Component_IDs
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
     output_files_dir = os.path.join(results, Test)
     src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
     uc.dirCreateClean(output_files_dir, [".pdf"])
@@ -71,26 +82,33 @@ def APT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfb
     test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
     for i in range(len(test_cases['Case No'])):
         if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
-            refs = []
-            for ref in (re.split('[ :,;]', test_cases['Ref 5'][i])):
-                refs.append(float(ref))
-            time_duration = max(refs[0:10])
-            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom,wfbase_MW, test_cases['SCR'][i], test_cases['XR'][i])
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
             output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
-            overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
-            uc.dirCreateClean(overlay_dir, [".pdf"])
             pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
             project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
             Main = project.user_canvas('Main')
             Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
             Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
-            Main.user_cmp(int(Vref_pu_ID)).set_parameters(V_1=test_cases['Vref_PSCAD_droop (pu)'][i])
-            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(Y1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(Y1=test_cases['Initial P PSCAD (pu)'][i])
             Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
+            Main.user_cmp(int(PPC_ID)).set_parameters(Pctrl=1)
             # Main Program:
-            pt_1,pt_2,pt_3,pt_4,pt_5,pt_6,pt_7,pt_8,pt_9,pt_10,P_1,P_2,P_3,P_4,P_5,P_6,P_7,P_8,P_9,P_10 = refs
-            Main.user_cmp(Ref_ID).set_parameters(OutMod=2,Pnum=int(10),pt_1=pt_1,pt_2=pt_2,pt_3=pt_3,pt_4=pt_4,pt_5=pt_5,pt_6=pt_6,pt_7=pt_7,pt_8=pt_8,pt_9=pt_9,pt_10=pt_10,
-                                                     P_1=P_1,P_2=P_2,P_3=P_3,P_4=P_4,P_5=P_5,P_6=P_6,P_7=P_7,P_8=P_8,P_9=P_9,P_10=P_10)
+            Main.user_cmp(p_ppc_ref_pu_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(p_ppc_ref_pu_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(p_ppc_ref_pu_ID).set_parameters(Mode=1)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
             ws.create_simulation_set(prj_name)
             ss = ws.simulation_set(prj_name)
             ss.add_tasks(prj_name)
@@ -103,15 +121,18 @@ def APT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfb
             pscad.quit()
             uc.copy(src_folder, output_files_dir, [".out", ".inf"])
             if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
                 uc.copy(src_folder, overlay_dir, [".out", ".inf"])
             uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
     if 'y' in Plotting_option.lower():
         plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
 # =======================================================
-def Fault_SMIB(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs,Ref_ID):
+def Fault_SMIB(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
     Test = 'Fault_SMIB'
     pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
-    PPC_ID, Rgrid_ID,Lgrid_ID,Vref_pu_ID,p_ppc_ref_pu_ID, Vsmib_pu_ID = Component_IDs
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
     output_files_dir = os.path.join(results, Test)
     src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
     uc.dirCreateClean(output_files_dir, [".pdf"])
@@ -120,26 +141,49 @@ def Fault_SMIB(PSCAD_input_file,study_cases_file,python_file,results, Project_in
     test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
     for i in range(len(test_cases['Case No'])):
         if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
-            time_duration = float(test_cases['Ref 8'][i])
-            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom,wfbase_MW, test_cases['SCR'][i], test_cases['XR'][i])
+            time_duration = float(test_cases['Ref 10'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
             output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
-            overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
-            uc.dirCreateClean(overlay_dir, [".pdf"])
             pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
             project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
             Main = project.user_canvas('Main')
             Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
             Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
-            Main.user_cmp(int(Vref_pu_ID)).set_parameters(V_1=test_cases['Vref_PSCAD_droop (pu)'][i])
-            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(Y1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(Y1=test_cases['Initial P PSCAD (pu)'][i])
             Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
             # Main Program:
-            Timed_Fault_Logic = int(Ref_ID[0])
-            Vdip_ID = int(Ref_ID[1])
-            Main.user_cmp(Timed_Fault_Logic).set_parameters(TF=float(test_cases['Ref 6'][i]), DF=float(test_cases['Ref 7'][i]))
-            if float(test_cases['Ref 5'][i]) == 0:
-                test_cases['Ref 5'][i] =0.01
-            Main.user_cmp(Vdip_ID).set_parameters(Value=float(test_cases['Ref 5'][i]))
+            Timed_Fault_Logic = int(Fault_IDs[0])
+            Vdip_ID = int(Fault_IDs[1])
+            Fault_type_ID = int(Fault_IDs[2])
+            Main.user_cmp(Timed_Fault_Logic).set_parameters(TF=float(test_cases['Ref 7'][i]), DF=float(test_cases['Ref 8'][i]))
+            if float(test_cases['Ref 6'][i]) == 0:
+                test_cases['Ref 6'][i] =0.01
+            Main.user_cmp(Vdip_ID).set_parameters(Value=float(test_cases['Ref 6'][i]))
+            if 'a' in test_cases['Ref 9'][i].lower():
+                Main.user_cmp(Fault_type_ID).set_parameters(A=1)
+            else:
+                Main.user_cmp(Fault_type_ID).set_parameters(A=0)
+            if 'b' in test_cases['Ref 9'][i].lower():
+                Main.user_cmp(Fault_type_ID).set_parameters(B=1)
+            else:
+                Main.user_cmp(Fault_type_ID).set_parameters(B=0)
+            if 'c' in test_cases['Ref 9'][i].lower():
+                Main.user_cmp(Fault_type_ID).set_parameters(C=1)
+            else:
+                Main.user_cmp(Fault_type_ID).set_parameters(C=0)
+            if 'g' in test_cases['Ref 9'][i].lower():
+                Main.user_cmp(Fault_type_ID).set_parameters(G=1)
+            else:
+                Main.user_cmp(Fault_type_ID).set_parameters(G=0)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
             ws.create_simulation_set(prj_name)
             ss = ws.simulation_set(prj_name)
             ss.add_tasks(prj_name)
@@ -152,15 +196,18 @@ def Fault_SMIB(PSCAD_input_file,study_cases_file,python_file,results, Project_in
             pscad.quit()
             uc.copy(src_folder, output_files_dir, [".out", ".inf"])
             if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
                 uc.copy(src_folder, overlay_dir, [".out", ".inf"])
             uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
     if 'y' in Plotting_option.lower():
         plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
 # =======================================================
-def FCT_PLB(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs,FCT_PLB_ID,APT_ID):
+def FCT_PLB(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
     Test = 'FCT_PLB'
     pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
-    PPC_ID, Rgrid_ID,Lgrid_ID,Vref_pu_ID,p_ppc_ref_pu_ID, Vsmib_pu_ID = Component_IDs
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
     output_files_dir = os.path.join(results, Test)
     src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
     uc.dirCreateClean(output_files_dir, [".pdf"])
@@ -169,18 +216,10 @@ def FCT_PLB(PSCAD_input_file,study_cases_file,python_file,results, Project_info,
     test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
     for i in range(len(test_cases['Case No'])):
         if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
-            ref1s = []
-            for ref1 in (re.split('[ :,;]', test_cases['Ref 5'][i])):
-                ref1s.append(float(ref1))
-            time_duration = max(ref1s[0:10])
-            if int(test_cases['Ref 6'][i]) == 3:
-                Pctrl_mode = 'FSM'
-            elif int(test_cases['Ref 6'][i]) == 1:
-                Pctrl_mode = 'PCtrl'
-            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom,wfbase_MW, test_cases['SCR'][i], test_cases['XR'][i])
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Pctrl_mode = test_cases['Ref 8'][i]
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
             output_filename = 'Case_%02d_%s_%s_PSCAD' % (test_cases['Case No'][i],Test,Pctrl_mode)
-            overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
-            uc.dirCreateClean(overlay_dir, [".pdf"])
             pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
             project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
             if time_duration >= 200:
@@ -192,16 +231,35 @@ def FCT_PLB(PSCAD_input_file,study_cases_file,python_file,results, Project_info,
             Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
             Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
             # Main Program:
-            Main.user_cmp(PPC_ID).set_parameters(Pctrl=int(test_cases['Ref 6'][i]))
-            X1,X2,X3,X4,X5,X6,X7,X8,X9,X10,Y1,Y2,Y3,Y4,Y5,Y6,Y7,Y8,Y9,Y10 = ref1s
-            Main.user_cmp(FCT_PLB_ID).set_parameters(Mode=1, N=10,X1=X1,X2=X2,X3=X3,X4=X4,X5=X5,X6=X6,X7=X7,X8=X8,X9=X9,X10=X10,Y1=Y1,Y2=Y2,Y3=Y3,Y4=Y4,Y5=Y5,Y6=Y6,Y7=Y7,Y8=Y8,Y9=Y9,Y10=Y10)
-            if test_cases['Ref 7'][i] != ' ':
-                ref2s = []
-                for ref2 in (re.split('[ :,;]', test_cases['Ref 7'][i])):
-                    ref2s.append(float(ref2))
-                pt_1,pt_2,pt_3,pt_4,pt_5,pt_6,pt_7,pt_8,pt_9,pt_10,P_1,P_2,P_3,P_4,P_5,P_6,P_7,P_8,P_9,P_10 = ref2s
-                Main.user_cmp(APT_ID).set_parameters(OutMod=2,Pnum=int(10),pt_1=pt_1,pt_2=pt_2,pt_3=pt_3,pt_4=pt_4,pt_5=pt_5,pt_6=pt_6,pt_7=pt_7,pt_8=pt_8,pt_9=pt_9,pt_10=pt_10,
-                                                         P_1=P_1,P_2=P_2,P_3=P_3,P_4=P_4,P_5=P_5,P_6=P_6,P_7=P_7,P_8=P_8,P_9=P_9,P_10=P_10)
+            if 'pctrl' in Pctrl_mode.lower():
+                Main.user_cmp(PPC_ID).set_parameters(Pctrl=1)
+            elif 'fsm1' in Pctrl_mode.lower():
+                Main.user_cmp(PPC_ID).set_parameters(Pctrl=2)
+            else:
+                Main.user_cmp(PPC_ID).set_parameters(Pctrl=3)
+            Main.user_cmp(FCT_PLB_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(FCT_PLB_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(FCT_PLB_ID).set_parameters(Mode=1)
+            if test_cases['Ref 9'][i] != '':
+                N2, ref2s, time_duration2 = get_reference(test_cases['Ref 9'][i])
+                Main.user_cmp(Fallback_ID[0]).set_parameters(N=N2, Mode=1, X1=ref2s[0][0], X2=ref2s[1][0], X3=ref2s[2][0],
+                                                         X4=ref2s[3][0], X5=ref2s[4][0], X6=ref2s[5][0], X7=ref2s[6][0],
+                                                         X8=ref2s[7][0], X9=ref2s[8][0], X10=ref2s[9][0],
+                                                         Y1=ref2s[0][1], Y2=ref2s[1][1], Y3=ref2s[2][1], Y4=ref2s[3][1],
+                                                         Y5=ref2s[4][1], Y6=ref2s[5][1], Y7=ref2s[6][1], Y8=ref2s[7][1],
+                                                         Y9=ref2s[8][1], Y10=ref2s[9][1])
+                Main.slider(Fallback_ID[1],Fallback_ID[2]).value(float(test_cases['Ref 10'][i]))
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
             ws.create_simulation_set(prj_name)
             ss = ws.simulation_set(prj_name)
             ss.add_tasks(prj_name)
@@ -214,15 +272,18 @@ def FCT_PLB(PSCAD_input_file,study_cases_file,python_file,results, Project_info,
             pscad.quit()
             uc.copy(src_folder, output_files_dir, [".out", ".inf"])
             if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
                 uc.copy(src_folder, overlay_dir, [".out", ".inf"])
             uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
     if 'y' in Plotting_option.lower():
         plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
 # =======================================================
-def VCT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs,Ref_ID):
+def VCT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
     Test = 'VCT'
     pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
-    PPC_ID, Rgrid_ID,Lgrid_ID,Vref_pu_ID,p_ppc_ref_pu_ID, Vsmib_pu_ID = Component_IDs
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
     output_files_dir = os.path.join(results, Test)
     src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
     uc.dirCreateClean(output_files_dir, [".pdf"])
@@ -231,26 +292,33 @@ def VCT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfb
     test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
     for i in range(len(test_cases['Case No'])):
         if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
-            refs = []
-            for ref in (re.split('[ :,;]', test_cases['Ref 5'][i])):
-                refs.append(float(ref))
-            time_duration = max(refs[0:10])
-            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom,wfbase_MW, test_cases['SCR'][i], test_cases['XR'][i])
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
             output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
-            overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
-            uc.dirCreateClean(overlay_dir, [".pdf"])
             pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
             project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
             Main = project.user_canvas('Main')
             Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
             Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
-            Main.user_cmp(int(Vref_pu_ID)).set_parameters(V_1=test_cases['Vref_PSCAD_droop (pu)'][i])
-            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(Y1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(Y1=test_cases['Initial P PSCAD (pu)'][i])
             Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
             # Main Program:
-            vt_1,vt_2,vt_3,vt_4,vt_5,vt_6,vt_7,vt_8,vt_9,vt_10,V_1,V_2,V_3,V_4,V_5,V_6,V_7,V_8,V_9,V_10 = refs
-            Main.user_cmp(Ref_ID).set_parameters(OutMod=2,Vnum=int(10),vt_1=vt_1,vt_2=vt_2,vt_3=vt_3,vt_4=vt_4,vt_5=vt_5,vt_6=vt_6,vt_7=vt_7,vt_8=vt_8,vt_9=vt_9,vt_10=vt_10,
-                                                     V_1=V_1,V_2=V_2,V_3=V_3,V_4=V_4,V_5=V_5,V_6=V_6,V_7=V_7,V_8=V_8,V_9=V_9,V_10=V_10)
+            Main.user_cmp(Vref_pu_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(Vref_pu_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(Vref_pu_ID).set_parameters(Mode=1)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
+
             ws.create_simulation_set(prj_name)
             ss = ws.simulation_set(prj_name)
             ss.add_tasks(prj_name)
@@ -263,15 +331,18 @@ def VCT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfb
             pscad.quit()
             uc.copy(src_folder, output_files_dir, [".out", ".inf"])
             if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
                 uc.copy(src_folder, overlay_dir, [".out", ".inf"])
             uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
     if 'y' in Plotting_option.lower():
         plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
 # =======================================================
-def VDT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs,Ref_ID):
+def VDT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
     Test = 'VDT'
     pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
-    PPC_ID, Rgrid_ID,Lgrid_ID,Vref_pu_ID,p_ppc_ref_pu_ID, Vsmib_pu_ID = Component_IDs
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
     output_files_dir = os.path.join(results, Test)
     src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
     uc.dirCreateClean(output_files_dir, [".pdf"])
@@ -280,14 +351,9 @@ def VDT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfb
     test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
     for i in range(len(test_cases['Case No'])):
         if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
-            refs = []
-            for ref in (re.split('[ :,;]', test_cases['Ref 5'][i])):
-                refs.append(float(ref))
-            time_duration = max(refs[0:10])
-            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom,wfbase_MW, test_cases['SCR'][i], test_cases['XR'][i])
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
             output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
-            overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
-            uc.dirCreateClean(overlay_dir, [".pdf"])
             pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
             project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
             Main = project.user_canvas('Main')
@@ -297,8 +363,20 @@ def VDT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfb
             Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
             Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
             # Main Program:
-            X1,X2,X3,X4,X5,X6,X7,X8,X9,X10,Y1,Y2,Y3,Y4,Y5,Y6,Y7,Y8,Y9,Y10 = refs
-            Main.user_cmp(Ref_ID).set_parameters(Mode=1, N=int(10),X1=X1,X2=X2,X3=X3,X4=X4,X5=X5,X6=X6,X7=X7,X8=X8,X9=X9,X10=X10,Y1=Y1,Y2=Y2,Y3=Y3,Y4=Y4,Y5=Y5,Y6=Y6,Y7=Y7,Y8=Y8,Y9=Y9,Y10=Y10)
+            Main.user_cmp(Vsmib_pu_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(Vsmib_pu_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(Vsmib_pu_ID).set_parameters(Mode=1)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
             ws.create_simulation_set(prj_name)
             ss = ws.simulation_set(prj_name)
             ss.add_tasks(prj_name)
@@ -311,6 +389,317 @@ def VDT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfb
             pscad.quit()
             uc.copy(src_folder, output_files_dir, [".out", ".inf"])
             if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
+                uc.copy(src_folder, overlay_dir, [".out", ".inf"])
+            uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    if 'y' in Plotting_option.lower():
+        plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
+# =======================================================
+def FRB(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
+    Test = 'FRB'
+    pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
+    output_files_dir = os.path.join(results, Test)
+    src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
+    uc.dirCreateClean(output_files_dir, [".pdf"])
+    uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    # uc.dirCreateClean(output_files_dir, [".out", ".inf", ".infx", ".pdf"])
+    test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
+    for i in range(len(test_cases['Case No'])):
+        if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
+            output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
+            pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
+            project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
+            if time_duration >= 200:
+                project.set_parameters(sample_step=50000)
+            Main = project.user_canvas('Main')
+            Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
+            Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(V_1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
+            # Main Program:
+            Main.user_cmp(Fallback_ID[0]).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(Fallback_ID[0]).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(Fallback_ID[0]).set_parameters(Mode=1)
+            Main.slider(Fallback_ID[1],Fallback_ID[2]).value(float(test_cases['Ref 8'][i]))
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
+            ws.create_simulation_set(prj_name)
+            ss = ws.simulation_set(prj_name)
+            ss.add_tasks(prj_name)
+            if 'y' in save_option.lower():
+                project.save_as(output_filename)
+                shutil.copy(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename),output_files_dir)
+                uc.dirCreateClean(os.path.dirname(PSCAD_input_file), [".bakx", ".psmx"])
+                # os.remove(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename))
+            ss.run()
+            pscad.quit()
+            uc.copy(src_folder, output_files_dir, [".out", ".inf"])
+            if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
+                uc.copy(src_folder, overlay_dir, [".out", ".inf"])
+            uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    if 'y' in Plotting_option.lower():
+        plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
+# =======================================================
+def RPT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
+    Test = 'RPT'
+    pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
+    output_files_dir = os.path.join(results, Test)
+    src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
+    uc.dirCreateClean(output_files_dir, [".pdf"])
+    uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    # uc.dirCreateClean(output_files_dir, [".out", ".inf", ".infx", ".pdf"])
+    test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
+    for i in range(len(test_cases['Case No'])):
+        if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
+            output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
+            pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
+            project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
+            Main = project.user_canvas('Main')
+            Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
+            Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(Y1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(Y1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
+            Main.user_cmp(int(PPC_ID)).set_parameters(Pctrl=1,Qctrl = 1)
+            # Main Program:
+            Main.user_cmp(Q_ppc_ref_pu_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(Q_ppc_ref_pu_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(Q_ppc_ref_pu_ID).set_parameters(Mode=1)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
+            ws.create_simulation_set(prj_name)
+            ss = ws.simulation_set(prj_name)
+            ss.add_tasks(prj_name)
+            if 'y' in save_option.lower():
+                project.save_as(output_filename)
+                shutil.copy(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename),output_files_dir)
+                uc.dirCreateClean(os.path.dirname(PSCAD_input_file), [".bakx", ".psmx"])
+                # os.remove(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename))
+            ss.run()
+            pscad.quit()
+            uc.copy(src_folder, output_files_dir, [".out", ".inf"])
+            if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
+                uc.copy(src_folder, overlay_dir, [".out", ".inf"])
+            uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    if 'y' in Plotting_option.lower():
+        plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
+# =======================================================
+def PFT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
+    Test = 'PFT'
+    pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
+    output_files_dir = os.path.join(results, Test)
+    src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
+    uc.dirCreateClean(output_files_dir, [".pdf"])
+    uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    # uc.dirCreateClean(output_files_dir, [".out", ".inf", ".infx", ".pdf"])
+    test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
+    for i in range(len(test_cases['Case No'])):
+        if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
+            output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
+            pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
+            project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
+            Main = project.user_canvas('Main')
+            Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
+            Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(Y1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(Y1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
+            Main.user_cmp(int(PPC_ID)).set_parameters(Pctrl=1,Qctrl = 2)
+            # Main Program:
+            Main.user_cmp(PF_ppc_ref_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(PF_ppc_ref_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(PF_ppc_ref_ID).set_parameters(Mode=1)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
+            ws.create_simulation_set(prj_name)
+            ss = ws.simulation_set(prj_name)
+            ss.add_tasks(prj_name)
+            if 'y' in save_option.lower():
+                project.save_as(output_filename)
+                shutil.copy(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename),output_files_dir)
+                uc.dirCreateClean(os.path.dirname(PSCAD_input_file), [".bakx", ".psmx"])
+                # os.remove(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename))
+            ss.run()
+            pscad.quit()
+            uc.copy(src_folder, output_files_dir, [".out", ".inf"])
+            if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
+                uc.copy(src_folder, overlay_dir, [".out", ".inf"])
+            uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    if 'y' in Plotting_option.lower():
+        plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
+# =======================================================
+def P_curtail(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
+    Test = 'P_curtail'
+    pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
+    output_files_dir = os.path.join(results, Test)
+    src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
+    uc.dirCreateClean(output_files_dir, [".pdf"])
+    uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    # uc.dirCreateClean(output_files_dir, [".out", ".inf", ".infx", ".pdf"])
+    test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
+    for i in range(len(test_cases['Case No'])):
+        if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
+            output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
+            pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
+            project.set_parameters(time_duration=time_duration, PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
+            Main = project.user_canvas('Main')
+            Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
+            Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(Y1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(Y1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
+            Main.user_cmp(int(PPC_ID)).set_parameters(Pctrl=1)
+            # Main Program:
+            Main.user_cmp(P_curt_ref_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(P_curt_ref_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(P_curt_ref_ID).set_parameters(Mode=1)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
+            ws.create_simulation_set(prj_name)
+            ss = ws.simulation_set(prj_name)
+            ss.add_tasks(prj_name)
+            if 'y' in save_option.lower():
+                project.save_as(output_filename)
+                shutil.copy(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename),output_files_dir)
+                uc.dirCreateClean(os.path.dirname(PSCAD_input_file), [".bakx", ".psmx"])
+                # os.remove(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename))
+            ss.run()
+            pscad.quit()
+            uc.copy(src_folder, output_files_dir, [".out", ".inf"])
+            if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
+                uc.copy(src_folder, overlay_dir, [".out", ".inf"])
+            uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    if 'y' in Plotting_option.lower():
+        plot_all_in_dir(output_files_dir,Test,Project_info,wfbase_MW)
+# =======================================================
+def PQT(PSCAD_input_file,study_cases_file,python_file,results, Project_info, wfbase_MW,VPCCnom, settings,Component_IDs):
+    Test = 'PQT'
+    pscad_ver, silence, cl_use_advanced, cl_auto_renewal, fortran_version,time_step,sample_step,Plotting_option,save_option,overlay = settings
+    PPC_ID, Rgrid_ID,Lgrid_ID,p_ppc_ref_pu_ID,F_ppc_ref_pu_ID,P_curt_ref_ID,Q_ppc_ref_pu_ID,PF_ppc_ref_ID,Vref_pu_ID,Vsmib_pu_ID,Fault_IDs,FCT_PLB_ID,Fallback_ID = Component_IDs
+    IDs,Chans,Enables,Symbols,New_Symbols = read_output_channels(study_cases_file, 'Output_channels')
+    output_files_dir = os.path.join(results, Test)
+    src_folder = '%s.if15_x86' % PSCAD_input_file[0:-5]
+    uc.dirCreateClean(output_files_dir, [".pdf"])
+    uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
+    # uc.dirCreateClean(output_files_dir, [".out", ".inf", ".infx", ".pdf"])
+    test_cases = uc.read_excel_sheet(study_cases_file,os.path.basename(python_file)[0:-3])
+    for i in range(len(test_cases['Case No'])):
+        if Test in str(test_cases['Name 1'][i]) and 'y' in str(test_cases['Execute'][i]).lower():
+            N, refs, time_duration = get_reference(test_cases['Ref 6'][i])
+            Rgrid_ohm, Lgrid_henry = uc.RL_calculation(VPCCnom, test_cases['sc_pcc_pu_Sbase'][i], test_cases['XR'][i])
+            output_filename = 'Case_%02d_%s_PSCAD' % (test_cases['Case No'][i],Test)
+            pscad,ws,project,prj_name = uc.PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renewal,fortran_version)
+            project.set_parameters(PlotType=1, output_filename=output_filename, sample_step=sample_step,time_step=time_step)
+            if time_duration >= 200:
+                project.set_parameters(sample_step=50000)
+            Main = project.user_canvas('Main')
+            Main.user_cmp(int(Rgrid_ID)).set_parameters(Value=Rgrid_ohm)
+            Main.user_cmp(int(Lgrid_ID)).set_parameters(Value=Lgrid_henry)
+            Main.user_cmp(int(Vref_pu_ID)).set_parameters(V_1=test_cases['Vref_PSCAD_droop (pu)'][i])
+            Main.user_cmp(int(p_ppc_ref_pu_ID)).set_parameters(P_1=test_cases['Initial P PSCAD (pu)'][i])
+            Main.user_cmp(int(Vsmib_pu_ID)).set_parameters(Y1=test_cases['Vsmib_PSCAD (pu)'][i])
+            Main.user_cmp(int(PPC_ID)).set_parameters(Pctrl=1, Qctrl=1)
+            # Main Program:
+            Main.user_cmp(p_ppc_ref_pu_ID).set_parameters(N=N,X1=refs[0][0],X2=refs[1][0],X3=refs[2][0],X4=refs[3][0],X5=refs[4][0],X6=refs[5][0],X7=refs[6][0],X8=refs[7][0],X9=refs[8][0],X10=refs[9][0],
+                                                          Y1=refs[0][1],Y2=refs[1][1],Y3=refs[2][1],Y4=refs[3][1],Y5=refs[4][1],Y6=refs[5][1],Y7=refs[6][1],Y8=refs[7][1],Y9=refs[8][1],Y10=refs[9][1])
+            if 'interpolate' in test_cases['Ref 7'][i].lower():
+                Main.user_cmp(p_ppc_ref_pu_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(p_ppc_ref_pu_ID).set_parameters(Mode=1)
+            N2, ref2s, time_duration2 = get_reference(test_cases['Ref 8'][i])
+            Main.user_cmp(Q_ppc_ref_pu_ID).set_parameters(N=N2,X1=ref2s[0][0],X2=ref2s[1][0],X3=ref2s[2][0],X4=ref2s[3][0],X5=ref2s[4][0],X6=ref2s[5][0],X7=ref2s[6][0],X8=ref2s[7][0],X9=ref2s[8][0],X10=ref2s[9][0],
+                                                          Y1=ref2s[0][1],Y2=ref2s[1][1],Y3=ref2s[2][1],Y4=ref2s[3][1],Y5=ref2s[4][1],Y6=ref2s[5][1],Y7=ref2s[6][1],Y8=ref2s[7][1],Y9=ref2s[8][1],Y10=ref2s[9][1])
+            if 'interpolate' in test_cases['Ref 9'][i].lower():
+                Main.user_cmp(Q_ppc_ref_pu_ID).set_parameters(Mode=0)
+            else:
+                Main.user_cmp(Q_ppc_ref_pu_ID).set_parameters(Mode=1)
+
+            time_duration = max(time_duration,time_duration2)
+            project.set_parameters(time_duration=time_duration)
+            project.create_layer('Disable')
+            project.set_layer('Disable', 'disabled')
+            for j, chan in enumerate(Chans):
+                if type(Enables[j]) == float or type(Enables[j]) == int:
+                    if int(Enables[j]) == 0:
+                        Main.user_cmp(IDs[j]).add_to_layer('Disable')
+                    elif (int(Enables[j]) == 1 and New_Symbols[j] != '' and New_Symbols[j] != Symbols[j]):
+                        Main.user_cmp(IDs[j]).set_parameters(UseSignalName=0, Name=New_Symbols[j])
+            ws.create_simulation_set(prj_name)
+            ss = ws.simulation_set(prj_name)
+            ss.add_tasks(prj_name)
+            if 'y' in save_option.lower():
+                project.save_as(output_filename)
+                shutil.copy(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename),output_files_dir)
+                uc.dirCreateClean(os.path.dirname(PSCAD_input_file), [".bakx", ".psmx"])
+                # os.remove(os.path.join(os.path.dirname(PSCAD_input_file), '%s.pscx'%output_filename))
+            ss.run()
+            pscad.quit()
+            uc.copy(src_folder, output_files_dir, [".out", ".inf"])
+            if overlay != '':
+                overlay_dir = os.path.join(overlay, '%s' % output_filename[0:-6])
+                uc.dirCreateClean(overlay_dir, [".pdf"])
                 uc.copy(src_folder, overlay_dir, [".out", ".inf"])
             uc.dirCreateClean(src_folder, [".out", ".inf", ".infx", ".pdf"])
     if 'y' in Plotting_option.lower():
@@ -327,14 +716,22 @@ def PSCAD_start(PSCAD_input_file,pscad_ver,silence,cl_use_advanced,cl_auto_renew
     project.focus()
     return pscad,ws,project,prj_name
 # =======================================================
-def RL_calculation(VPCCnom,wfbase_MW,scr,xr):
-    sc_pcc_pu_Sbase = (scr * wfbase_MW) / 100.0  # 100MVA System base
+def RL_calculation(VPCCnom,sc_pcc_pu_Sbase,xr):
+    # sc_pcc_pu_Sbase = (scr * wfbase_MW) / 100.0  # 100MVA System base
     Rgrid_pu = math.sqrt(((1.0 / sc_pcc_pu_Sbase) ** 2) / (xr ** 2 + 1.0))
     Xgrid_pu = Rgrid_pu * xr
     Rgrid_ohm = Rgrid_pu * (VPCCnom * VPCCnom / 100)
     Xgrid_ohm = Xgrid_pu * (VPCCnom * VPCCnom / 100)
     Lgrid_henry = Xgrid_ohm / (2 * 50 * math.pi)
     return Rgrid_ohm,Lgrid_henry
+# =======================================================
+def find_scpu_xr(VPCCnom,Rgrid_ohm,Lgrid_henry):
+    Xgrid_ohm = Lgrid_henry * (2 * 50 * math.pi)
+    Xgrid_pu = Xgrid_ohm/(VPCCnom * VPCCnom / 100)
+    Rgrid_pu = Rgrid_ohm/(VPCCnom * VPCCnom / 100)
+    xr = Xgrid_pu/Rgrid_pu
+    sc_pcc_pu_Sbase = 1/(math.sqrt(Rgrid_pu ** 2 + Xgrid_pu ** 2))
+    return sc_pcc_pu_Sbase,xr
 # =======================================================
 def read_excel_sheet(excel_file, sheet_name):
     import os,xlrd,shutil
@@ -384,6 +781,7 @@ def read_project_info(excel_file,version):
     sheet_names = xl_workbook.sheet_names()
     models = ['GSVW','GSPQ','GSLH','GSME','GSVF','VWPO','VWRE','WTG_GSV8','PPC_V8']
     Project_info = {}
+    xl_sheet = xl_workbook.sheet_by_name('PPC_PSSE_VWRE')
     for sheet_name in sheet_names:
         for model in models:
             if model in sheet_name:
@@ -472,66 +870,90 @@ def read_project_info(excel_file,version):
             for col_idx in range(1, xl_sheet.ncols):
                 col_idx_data = (int(xl_sheet.cell(1, col_idx).value),(xl_sheet.cell(5, col_idx)).value,(xl_sheet.cell(6, col_idx)).value,(xl_sheet.cell(7, col_idx)).value,(xl_sheet.cell(8, col_idx)).value,(xl_sheet.cell(9, col_idx)).value,(xl_sheet.cell(10, col_idx)).value,(xl_sheet.cell(11, col_idx)).value)
                 Project_info['msu_caps'].append(col_idx_data)
-
-        xl_sheet = xl_workbook.sheet_by_name('USRCD1')
-        dyrs = ['MSU', 'FCT_01', 'FCT_02', 'FCT_03', 'FCT_04', 'FCT_05', 'FCT_06', 'FCT_07', 'FCT_08']
-        for row_idx in range(0, xl_sheet.nrows):
-            cell_obj = (xl_sheet.cell(row_idx, 0)).value
-            if 'ICON' in cell_obj:
-                start_icon = row_idx
-            elif 'CON' in cell_obj:
-                start_con = row_idx
-            elif 'STATE' in cell_obj:
-                start_state = row_idx
-            elif 'VAR' in cell_obj:
-                start_var = row_idx
-        row_title = xl_sheet.row(0)
-        for col_idx in range(len(row_title)):
-            for dyr in dyrs:
-                if dyr in row_title[col_idx].value:
-                    # Title
-                    Project_info[dyr + '_description'] = (xl_sheet.cell(start_icon, col_idx)).value
-                    title = (xl_sheet.cell(start_icon, col_idx)).value
-                    # read ICON
-                    num_icon = int(re.split('[ :,;]', title)[-4])
-                    num_con = int(re.split('[ :,;]', title)[-3])
-                    num_state = int(re.split('[ :,;]', title)[-2])
-                    num_var = int(re.split('[ :,;]', title)[-1])
-                    col_idx_data = []
-                    for row_idx in range(start_icon + 1, start_icon + 1 + num_icon):
-                        cell_obj = (xl_sheet.cell(row_idx, col_idx)).value
-                        if isinstance(cell_obj, str):
-                            cell_obj = str(cell_obj)
-                        elif isinstance(cell_obj, float):
-                            cell_obj = int(cell_obj)
-                        if cell_obj != '':
-                            col_idx_data.append(cell_obj)
-                    Project_info[dyr + '_M'] = col_idx_data
-                    # read CON
-                    col_idx_data = []
-                    for row_idx in range(start_con + 1, start_con + 1 + num_con):
-                        cell_obj = (xl_sheet.cell(row_idx, col_idx)).value
-                        if isinstance(cell_obj, str):
-                            cell_obj = str(cell_obj)
-                        if cell_obj != '':
-                            col_idx_data.append(cell_obj)
-                    Project_info[dyr + '_J'] = col_idx_data
-                    # read STATE
-                    col_idx_data = []
-                    for row_idx in range(start_state + 1, start_state + 1 + num_state):
-                        cell_obj = int((xl_sheet.cell(row_idx, col_idx)).value)
-                        if cell_obj != '':
-                            col_idx_data.append(cell_obj)
-                    Project_info[dyr + '_K'] = col_idx_data
-                    # read VAR
-                    col_idx_data = []
-                    for row_idx in range(start_var + 1, start_var + 1 + num_var):
-                        cell_obj = int((xl_sheet.cell(row_idx, col_idx)).value)
-                        if cell_obj != '':
-                            col_idx_data.append(cell_obj)
-                    Project_info[dyr + '_L'] = col_idx_data
+        # ---------------------------------------
+        if sheet_name == 'WTG_PSCAD_Parfile':
+            data = read_excel_sheet(excel_file, sheet_name)
+            Project_info[sheet_name] = data
+        # ---------------------------------------
+        if sheet_name == 'PPC_PSCAD_Parfile':
+            data = read_excel_sheet(excel_file, sheet_name)
+            Project_info[sheet_name] = data
     return Project_info
-
+# =======================================================
+def create_WTG_PSCAD_Parfile(Project_info,PSCAD_version, WTG_PSCAD_Parfile):
+    Parfile = open(WTG_PSCAD_Parfile, "w")
+    for i in range(len(Project_info['WTG_PSCAD_Parfile']['Enable'])):
+        if Project_info['WTG_PSCAD_Parfile']['Enable'][i] == 1:
+            if type(Project_info['WTG_PSCAD_Parfile'][PSCAD_version][i]) == str:
+                Project_info['WTG_PSCAD_Parfile'][PSCAD_version][i] = float(Project_info['WTG_PSCAD_Parfile'][PSCAD_version][i])
+            Parfile.write("%g\t" %Project_info['WTG_PSCAD_Parfile'][PSCAD_version][i])
+            Parfile.write("%s\t" %Project_info['WTG_PSCAD_Parfile']['Name'][i])
+            Parfile.write('%d' % Project_info['WTG_PSCAD_Parfile']['Index'][i])
+            Parfile.write("\n")
+    Parfile.close()
+# =======================================================
+def create_PPC_PSCAD_Parfile(Project_info,PSCAD_version, PPC_PSCAD_Parfile):
+    Parfile = open(PPC_PSCAD_Parfile, "w")
+    Parfile.write('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \n')
+    Parfile.write('! Parameters always user defined from PSCAD tool interface BEGIN\n')
+    Parfile.write('! Site_P_Nominal_kW\n')
+    Parfile.write('! Site_V_Nominal_KVolt\n')
+    Parfile.write('! P_FRB_TSO_kW\n')
+    Parfile.write('! UseSetpointLimits (1/0)\n')
+    Parfile.write('! MaxSetpointSumCAP_kVAR\n')
+    Parfile.write('! MaxSetpointSumIND_kVAR\n')
+    Parfile.write('! QBase_kVAR\n')
+    Parfile.write('! UseRefQLimits  (1/0)\n')
+    Parfile.write('! RefQLimCAP_kVAR=Site_P_Nominal_kW*(TAN(ACOS(0.95)))\n')
+    Parfile.write('! P_ControlMode(1=Active_power_control,2=Frequency_control_type_1,3=Frequency_control_type_2)\n')
+    Parfile.write('! Q_ControlMode(1=Reactive_power_control,2=Power_factor_control,3=Voltage_control,4=Voltage_droop_control,5=VoltageQ_Slope_Control)\n')
+    Parfile.write('! Enable_P_FRB_TSO\n')
+    Parfile.write('! Parameters always user defined from PSCAD tool interface END\n')
+    Parfile.write('! The above values set from PSCAD tool interface will overwrite the below corresponding default values \n')
+    Parfile.write('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
+    Parfile.write('\n')
+    Parfile.write('!PPC PM Start ===========================================================\n')
+    for i in range(len(Project_info['PPC_PSCAD_Parfile']['Index'])):
+        if type(Project_info['PPC_PSCAD_Parfile']['Index'][i]) == str:
+            if 'PPC PM Start' in Project_info['PPC_PSCAD_Parfile']['Index'][i]:
+                PM_Start = i
+            elif 'PPC PM End' in Project_info['PPC_PSCAD_Parfile']['Index'][i]:
+                PM_End = i
+            elif 'PPC P Start' in Project_info['PPC_PSCAD_Parfile']['Index'][i]:
+                P_Start = i
+            elif 'PPC P End' in Project_info['PPC_PSCAD_Parfile']['Index'][i]:
+                P_End = i
+            elif 'PPC Q Start' in Project_info['PPC_PSCAD_Parfile']['Index'][i]:
+                Q_Start = i
+            elif 'PPC Q End' in Project_info['PPC_PSCAD_Parfile']['Index'][i]:
+                Q_End = i
+    for i in range(PM_Start,PM_End):
+        if Project_info['PPC_PSCAD_Parfile']['Enable'][i] == 1:
+            if type(Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i]) == str:
+                Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i] = float(Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i])
+            Parfile.write("%g\t" %float(Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i]))
+            Parfile.write("%s\t" %Project_info['PPC_PSCAD_Parfile']['Description'][i])
+            Parfile.write('%d'% Project_info['PPC_PSCAD_Parfile']['Index'][i])
+            Parfile.write("\n")
+    Parfile.write('!PPC PM End ===========================================================\n')
+    Parfile.write('!PPC P Start ===========================================================\n')
+    for i in range(P_Start,P_End):
+        if Project_info['PPC_PSCAD_Parfile']['Enable'][i] == 1:
+            if type(Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i]) == str:
+                Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i] = float(Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i])
+            Parfile.write("%s\t" %Project_info['PPC_PSCAD_Parfile']['Description'][i])
+            Parfile.write('%d'% Project_info['PPC_PSCAD_Parfile']['Index'][i])
+            Parfile.write("\n")
+    Parfile.write('!PPC P End ===========================================================\n')
+    Parfile.write('!PPC Q Start ===========================================================\n')
+    for i in range(Q_Start,Q_End):
+        if Project_info['PPC_PSCAD_Parfile']['Enable'][i] == 1:
+            if type(Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i]) == str:
+                Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i] = float(Project_info['PPC_PSCAD_Parfile'][PSCAD_version][i])
+            Parfile.write("%s\t" %Project_info['PPC_PSCAD_Parfile']['Description'][i])
+            Parfile.write('%d'% Project_info['PPC_PSCAD_Parfile']['Index'][i])
+            Parfile.write("\n")
+    Parfile.close()
 # =======================================================
 def convert_out_xlsx(outfiles):
     import sys, os
@@ -552,7 +974,7 @@ def get_data(xl_sheet):
     title_col = 0
     chan_number_row = 0
     title_row = 0
-    short_title = os.path.splitext(filename)[0]
+    short_title = os.path.spliEnables(filename)[0]
     row_chan = xl_sheet.row(chan_number_row)
     row_title = xl_sheet.row(title_row)
     for chan_idx in range(len(row_chan)):
@@ -669,6 +1091,26 @@ def dirCreateClean(path,fileTypes):
             if f.endswith(type):
                 os.remove(os.path.join(path, f))
 # ========================================================
+def get_reference(list):
+    refs = []
+    for ref in (re.split('[;]', list)):
+        ref = ref.strip('()[]').split(',')
+        float_ref = ref
+        for i in range(len(ref)):
+            try:
+                float_ref[i] = float(ref[i])
+            except:
+                float_ref[i] = (ref[i])
+        refs.append(float_ref)
+    N = int(len(refs))
+    while len(refs) <10:
+        refs.append(refs[-1])
+    time_duration = 0
+    for ref in refs:
+        if ref[0] > time_duration:
+            time_duration = ref[0]
+    return N, refs, time_duration
+# ========================================================
 def merge_pdf(dir_to_merge):
     copy_dir = os.path.dirname(dir_to_merge)
     input_streams = []
@@ -695,7 +1137,6 @@ def merge_pdf(dir_to_merge):
     # shutil.copy2(pdf_file, copy_dir)
     # command = "xcopy \"" + pdf_file + "\" " + "\"" + copy_pdf_file + "*\""
     # os.system(command)
-
 # ========================================================
 def read_output_channels(excel_file, sheet_name):
     import xlrd
@@ -726,47 +1167,55 @@ def read_output_channels(excel_file, sheet_name):
         chandata[row_title[col_idx].value] = col_idx_data
     IDs = chandata['Instance']
     Chans = chandata['Symbol']
-    return IDs,Chans
+    Enables = chandata['Enable/Disable']
+    Symbols = chandata['Symbol']
+    New_Symbols = chandata['New_Symbol']
+    return IDs,Chans,Enables,Symbols,New_Symbols
 # ========================================================
 def plot_all_in_dir(dir_to_plot,Test,Project_info,wfbase_MW):
     dirCreateClean(dir_to_plot, [".pdf"])
     filenames = glob.glob(os.path.join(dir_to_plot,'*.inf'))
-    plot_Vdroop, plot_Qdroop = Droop_parameters(Project_info, wfbase_MW)
+    plot_Vdroop, plot_Qdroop = PSCAD_Droop_parameters(Project_info, wfbase_MW)
     for filename in filenames:
-        if 'APT' in Test:
+        if 'FCT' in Test:
             plot = pl.Plotting()
             plot.read_data(filename)
-            plot.subplot_spec(0, (0, 'V_RMS_WTG1'), title='WTG Voltage', ylabel='Voltage (pu)', scale=1.0, offset=0.0)
-            plot.subplot_spec(0, (0, 'V_RMS_WTG2'))
-            plot.subplot_spec(1, (0, 'V_PCC_RMS_meas'), title='Voltage', ylabel='Voltage (pu)', scale=1.0, offset=0.0)
-            plot.subplot_spec(1, (0, 'Vref'), scale=1.0)
-            plot.subplot_spec(2, (0, 'P_WTG1'), title='Active Power at WTG', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
-            plot.subplot_spec(2, (0, 'P_WTG2'), scale=1.0)
-            plot.subplot_spec(3, (0, 'P_PCC_meas'), title='Active Power at POC', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
-            plot.subplot_spec(3, (0, 'Pref'),scale=wfbase_MW, offset=0.0)
-            plot.subplot_spec(4, (0, 'Q_WTG1'), title='Reactive Power at WTG', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0)
-            plot.subplot_spec(4, (0, 'Q_WTG2'), scale=1.0)
-            plot.subplot_spec(5, (0, 'Q_PCC_meas'), title='Reactive Power at POC', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0)
+            plot.subplot_spec(0, (0, 'F_PCC_MEAS_HZ'), title='Frequency', ylabel='Frequency (Hz)', scale=1.0, offset=0.0)
+            plot.subplot_spec(1, (0, 'V_PCC_MEAS_PU'), title='Voltage', ylabel='Voltage (pu)', scale=1.0, offset=0.0)
+            plot.subplot_spec(1, (0, 'V_WTG01_MEAS_PU'))
+            plot.subplot_spec(1, (0, 'V_WTG02_MEAS_PU'))
+            plot.subplot_spec(1, (0, 'V_PCC_REF_PU'), scale=1.0)
+            plot.subplot_spec(2, (0, 'P_WTG01_MEAS_MW'), title='Active Power at WTG', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
+            plot.subplot_spec(2, (0, 'P_WTG02_MEAS_MW'), scale=1.0)
+            plot.subplot_spec(3, (0, 'P_PCC_MEAS_MW'), title='Active Power at POC', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
+            plot.subplot_spec(3, (0, 'P_PCC_REF_MW'),scale=1, offset=0.0)
+            plot.subplot_spec(4, (0, 'Q_WTG01_MEAS_MVAR'), title='Reactive Power at WTG', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0)
+            plot.subplot_spec(4, (0, 'Q_WTG02_MEAS_MVAR'), scale=1.0)
+            plot.subplot_spec(4, (0, 'Q_MSU1_MEAS_MVAR'), scale=1.0)
+            plot.subplot_spec(4, (0, 'Q_MSU2_MEAS_MVAR'), scale=1.0)
+            plot.subplot_spec(5, (0, 'Q_PCC_MEAS_MVAR'), title='Reactive Power at POC', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0, plot_Qdroop=plot_Qdroop)
         else:
             plot = pl.Plotting()
             plot.read_data(filename)
-            plot.subplot_spec(0, (0, 'V_RMS_WTG1'), title='WTG Voltage', ylabel='Voltage (pu)', scale=1.0, offset=0.0)
-            plot.subplot_spec(0, (0, 'V_RMS_WTG2'))
-            plot.subplot_spec(1, (0, 'V_PCC_RMS_meas'), title='Voltage', ylabel='Voltage (pu)', scale=1.0, offset=0.0) # plot_Vdroop = [26, 15, 0.04, 72.2, 0.005] [POC_V_ref_Channel_id,Q_POC_Channel_id, QDROOP, wfbase_MW]
-            plot.subplot_spec(1, (0, 'Vref'), scale=1.0)
-            plot.subplot_spec(2, (0, 'P_WTG1'), title='Active Power at WTG', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
-            plot.subplot_spec(2, (0, 'P_WTG2'), scale=1.0)
-            plot.subplot_spec(3, (0, 'P_PCC_meas'), title='Active Power at POC', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
-            plot.subplot_spec(3, (0, 'Pref'),scale=wfbase_MW, offset=0.0)
-            plot.subplot_spec(4, (0, 'Q_WTG1'), title='Reactive Power at WTG', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0)
-            plot.subplot_spec(4, (0, 'Q_WTG2'), scale=1.0)
-            plot.subplot_spec(5, (0, 'Q_PCC_meas'), title='Reactive Power at POC', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0)
+            plot.subplot_spec(0, (0, 'V_WTG01_MEAS_PU'), title='WTG Voltage', ylabel='Voltage (pu)', scale=1.0, offset=0.0)
+            plot.subplot_spec(0, (0, 'V_WTG02_MEAS_PU'))
+            plot.subplot_spec(1, (0, 'V_PCC_MEAS_PU'), title='Voltage', ylabel='Voltage (pu)', scale=1.0, offset=0.0)
+            plot.subplot_spec(1, (0, 'V_PCC_REF_PU'), scale=1.0)
+            plot.subplot_spec(2, (0, 'P_WTG01_MEAS_MW'), title='Active Power at WTG', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
+            plot.subplot_spec(2, (0, 'P_WTG02_MEAS_MW'), scale=1.0)
+            plot.subplot_spec(3, (0, 'P_PCC_MEAS_MW'), title='Active Power at POC', ylabel='Active Power(MW)', scale=1.0, offset=0.0)
+            plot.subplot_spec(3, (0, 'P_PCC_REF_MW'),scale=1, offset=0.0)
+            plot.subplot_spec(4, (0, 'Q_WTG01_MEAS_MVAR'), title='Reactive Power at WTG', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0)
+            plot.subplot_spec(4, (0, 'Q_WTG02_MEAS_MVAR'), scale=1.0)
+            plot.subplot_spec(4, (0, 'Q_MSU1_MEAS_MVAR'), scale=1.0)
+            plot.subplot_spec(4, (0, 'Q_MSU2_MEAS_MVAR'), scale=1.0)
+            plot.subplot_spec(5, (0, 'Q_PCC_MEAS_MVAR'), title='Reactive Power at POC', ylabel='Reactive power(MVar)', scale=1.0,offset=0.0, plot_Qdroop=plot_Qdroop)
         plot.plot(figname=os.path.splitext(filename)[0], show=0)
     merge_pdf(dir_to_plot)
 # =======================================================
-def Droop_parameters(Project_info,wfbase_MW):
+def PSCAD_Droop_parameters(Project_info,wfbase_MW):
     if 'VWRE_J' in Project_info:
-        POC_V_ref_Channel_id = 'VWRE_VAR_L4'
+        POC_V_ref_Channel_id = 'V_PCC_REF_PU'
         V_POC_Channel_id = 'V_PCC_MEAS_PU'
         Q_POC_Channel_id = 'Q_PCC_MEAS_MVAR'
         QDROOP_over_percent = Project_info['VWRE_J'][4]
@@ -777,7 +1226,7 @@ def Droop_parameters(Project_info,wfbase_MW):
         Qrefupperlimit = Project_info['VWRE_J'][19]
         Qreflowerlimit = Project_info['VWRE_J'][20]
     else:
-        POC_V_ref_Channel_id = 'PPC_VAR_L2'
+        POC_V_ref_Channel_id = 'V_PCC_REF_PU'
         V_POC_Channel_id = 'V_PCC_MEAS_PU'
         Q_POC_Channel_id = 'Q_PCC_MEAS_MVAR'
         QDROOP_over_percent = Project_info['PPC_V8_J'][211] * 100
