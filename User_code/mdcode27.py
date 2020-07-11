@@ -10,6 +10,8 @@ wtg_source_code_path = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Proje
 ppc_source_code_path = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\Source Code\02. PPC"
 fbc_user_code_path = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\Source Code\03. " \
                      r"Miscellaneous\FBC User Code"
+fic_user_code_path = r"C:\Users\didng\OneDrive - Vestas Wind Systems A S\Projects\Source Code\03. Miscellaneous\FI " \
+                     r"User Code"
 #
 sys_path_psse = r'C:\Program Files (x86)\PTI\PSSE34\PSSPY27'
 sys.path.append(sys_path_psse)
@@ -84,8 +86,8 @@ def vestas_msufbk_compilation(msufbc_version, psse_ver_major, psse_ver_minor, ms
     vestas_msufbc_version_dll_file = os.path.join(vestas_dll_dir, vestas_msufbc_dll_name)
 
     #
-    wtg_working_dir = os.path.join(fbc_user_code_path, msufbc_version)
-    fortran_files = uc.get_files_name(wtg_working_dir, ['.for'])
+    fbc_working_dir = os.path.join(fbc_user_code_path, msufbc_version)
+    fortran_files = uc.get_files_name(fbc_working_dir, ['.for'])
 
     if abs(msufbc_compiler - 1) < 0.1:
         try:
@@ -98,6 +100,31 @@ def vestas_msufbk_compilation(msufbc_version, psse_ver_major, psse_ver_minor, ms
                                            dllname=vestas_msufbc_version_dll_file, workdir=os.getcwd(), showprg=False,
                                            useivfvrsn='latest',
                                            shortname=vestas_msufbc_version_dll_file, description='User Model',
+                                           majorversion=1,
+                                           minorversion=0, buildversion=0, companyname='Vestas', mypathlib=False)
+        uc.dirCreateClean(vestas_dll_dir, ["*.f"])
+    else:
+        print "compilation is not required"
+
+def vestas_fi_compilation(fic_version, psse_ver_major, psse_ver_minor, fic_compiler):
+    vestas_fic_dll_name = fic_version + str(psse_ver_major) + "." + str(psse_ver_minor) + ".dll"
+    vestas_fic_version_dll_file = os.path.join(vestas_dll_dir, vestas_fic_dll_name)
+
+    #
+    fic_working_dir = os.path.join(fic_user_code_path, fic_version)
+    fortran_files = uc.get_files_name(fic_working_dir, ['.for'])
+
+    if abs(fic_compiler - 1) < 0.1:
+        try:
+            os.remove(vestas_fic_version_dll_file)
+        except WindowsError:
+            print 'no file *.dll to delete!', vestas_fic_version_dll_file
+        ierr = psse_env_manager.create_dll(34, fortran_files,
+                                           modsources=[],
+                                           objlibfiles=[],
+                                           dllname=vestas_fic_version_dll_file, workdir=os.getcwd(), showprg=False,
+                                           useivfvrsn='latest',
+                                           shortname=vestas_fic_version_dll_file, description='User Model',
                                            majorversion=1,
                                            minorversion=0, buildversion=0, companyname='Vestas', mypathlib=False)
         uc.dirCreateClean(vestas_dll_dir, ["*.f"])
